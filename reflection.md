@@ -83,6 +83,10 @@ This class represents a task assigned to a specific time slot within the schedul
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+One explicit tradeoff is conflict detection: the scheduler currently flags conflicts when two tasks share the exact same `HH:MM` start time, instead of computing full overlap windows for all task durations.
+
+This is reasonable for this project because it keeps the algorithm lightweight and easy to explain while still catching the most common user mistake (double-booking the same time slot). It also avoids extra complexity in the first version, while leaving a clear upgrade path to interval-overlap checks in a future iteration.
+
 ---
 
 ## 3. AI Collaboration

@@ -1,4 +1,5 @@
 import streamlit as st
+from pawpal_system import Frequency, Owner, Pet, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -38,16 +39,74 @@ At minimum, your system should:
 
 st.divider()
 
-st.subheader("Quick Demo Inputs (UI only)")
+st.subheader("Owner and Pet")
 owner_name = st.text_input("Owner name", value="Jordan")
 pet_name = st.text_input("Pet name", value="Mochi")
 species = st.selectbox("Species", ["dog", "cat", "other"])
+breed = st.text_input("Breed", value="Unknown")
+age_years = st.number_input("Age (years)", min_value=0, max_value=40, value=2)
+special_needs_input = st.text_input(
+    "Special needs (comma-separated)",
+    value="",
+    placeholder="e.g., daily exercise, sensitive stomach",
+)
+
+# Session "vault": keep one Owner object alive across reruns/navigation.
+if "owner_obj" not in st.session_state or not isinstance(st.session_state["owner_obj"], Owner):
+    default_pet = Pet(
+        pet_id="pet_001",
+        name=pet_name,
+        species=species,
+        breed="Unknown",
+        age_years=0,
+    )
+    st.session_state["owner_obj"] = Owner(
+        owner_id="owner_001",
+        name=owner_name,
+        available_minutes_per_day=120,
+        preferences={},
+        pet=default_pet,
+    )
+
+owner_obj = st.session_state["owner_obj"]
+# Keep profile fields in sync with current inputs without recreating the object.
+owner_obj.name = owner_name
+if owner_obj.pet:
+    owner_obj.pet.update_profile(
+        {
+            "name": pet_name,
+            "species": species,
+            "breed": breed,
+            "age_years": int(age_years),
+        }
+    )
+
+if st.button("Add/Update Pet"):
+    if owner_obj.pet is None:
+        owner_obj.pet = Pet(
+            pet_id="pet_001",
+            name=pet_name,
+            species=species,
+            breed=breed,
+            age_years=int(age_years),
+        )
+    else:
+        owner_obj.pet.update_profile(
+            {
+                "name": pet_name,
+                "species": species,
+                "breed": breed,
+                "age_years": int(age_years),
+            }
+        )
+
+    owner_obj.pet.special_needs.clear()
+    for need in [item.strip() for item in special_needs_input.split(",") if item.strip()]:
+        owner_obj.pet.add_special_need(need)
+    st.success("Pet profile saved in session vault.")
 
 st.markdown("### Tasks")
-st.caption("Add a few tasks. In your final version, these should feed into your scheduler.")
-
-if "tasks" not in st.session_state:
-    st.session_state.tasks = []
+st.caption("Add tasks using Owner.add_task() from your backend model.")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -58,31 +117,78 @@ with col3:
     priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 
 if st.button("Add task"):
-    st.session_state.tasks.append(
-        {"title": task_title, "duration_minutes": int(duration), "priority": priority}
-    )
+    task_id = f"task_{len(owner_obj.get_tasks()) + 1:03d}"
+    try:
+        owner_obj.add_task(
+            Task(
+                task_id=task_id,
+                title=task_title,
+                category="general",
+                duration_minutes=int(duration),
+                priority={"low": 3, "medium": 6, "high": 9}[priority],
+                frequency=Frequency.DAILY,
+                preferred_time_window="anytime",
+            )
+        )
+        st.success(f"Added task '{task_title}'")
+    except ValueError as err:
+        st.error(str(err))
 
-if st.session_state.tasks:
+current_tasks = owner_obj.get_tasks()
+if current_tasks:
     st.write("Current tasks:")
-    st.table(st.session_state.tasks)
+    st.table(
+        [
+            {
+                "title": task.title,
+                "duration_minutes": task.duration_minutes,
+                "priority": task.priority,
+                "frequency": task.frequency.value,
+            }
+            for task in current_tasks
+        ]
+    )
 else:
     st.info("No tasks yet. Add one above.")
+
+st.caption(
+    f"Session vault check: owner_obj exists = {'owner_obj' in st.session_state} | "
+    f"Owner tasks persisted = {len(owner_obj.get_tasks())}"
+)
 
 st.divider()
 
 st.subheader("Build Schedule")
-st.caption("This button should call your scheduling logic once you implement it.")
+st.caption("Uses your model methods and the same summary style as main.py.")
 
 if st.button("Generate schedule"):
-    st.warning(
-        "Not implemented yet. Next step: create your scheduling logic (classes/functions) and call it here."
-    )
-    st.markdown(
-        """
-Suggested approach:
-1. Design your UML (draft).
-2. Create class stubs (no logic).
-3. Implement scheduling behavior.
-4. Connect your scheduler here and display results.
-"""
-    )
+    if owner_obj.pet is None:
+        st.warning("Please add a pet profile first.")
+    elif not owner_obj.get_tasks():
+        st.warning("Please add at least one task before generating a schedule.")
+    else:
+        st.markdown("### Today's Schedule")
+        st.write(f"Owner: {owner_obj.name}")
+        st.write(f"Pet: {owner_obj.pet.name} ({owner_obj.pet.species})")
+        st.caption(owner_obj.pet.get_care_context())
+
+        scheduled_rows = []
+        total_minutes = 0
+        for idx, task in enumerate(owner_obj.get_tasks(), start=1):
+            scheduled_rows.append(
+                {
+                    "#": idx,
+                    "Task": task.title,
+                    "Duration": task.duration_minutes,
+                    "Priority": task.priority,
+                    "Frequency": task.frequency.value,
+                }
+            )
+            total_minutes += task.duration_minutes
+
+        st.table(scheduled_rows)
+        st.write(f"Total task duration: {total_minutes} minutes")
+        st.write(f"Available time: {owner_obj.available_minutes_per_day} minutes")
+        st.write(
+            f"Remaining time: {owner_obj.available_minutes_per_day - total_minutes} minutes"
+        )

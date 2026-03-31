@@ -9,8 +9,8 @@ Tests cover:
 """
 
 import pytest
-from datetime import date
-from pawpal_system import Owner, Pet, Task, Frequency
+from datetime import date, timedelta
+from pawpal_system import Owner, Pet, Task, Frequency, Planner, Scheduler
 
 
 class TestTaskCompletion:
@@ -291,6 +291,167 @@ class TestOwnerTaskManagement:
         """Verify that updating non-existent task raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
             sample_owner_with_tasks.update_task("nonexistent", {"title": "New"})
+
+
+class TestSchedulingLogic:
+    """Test planner behaviors for filtering, recurrence, conflicts, and allocation."""
+
+    @pytest.fixture
+    def sample_pet(self):
+        return Pet("pet_001", "Buddy", "Dog", "Golden Retriever", 3)
+
+    @pytest.fixture
+    def sample_owner(self, sample_pet):
+        return Owner(
+            owner_id="owner_sched",
+            name="Alice",
+            available_minutes_per_day=40,
+            preferences={},
+            pet=sample_pet,
+        )
+
+    def test_recurring_task_is_due_logic(self):
+        task = Task("weekly_1", "Weekly Groom", "grooming", 20, 7, Frequency.WEEKLY, "afternoon")
+        today = date.today()
+
+        assert task.is_due(today)
+
+        task.mark_completed(today)
+        assert not task.is_due(today)
+
+    def test_filter_by_pet_and_status(self, sample_owner):
+        today = date.today()
+        task_for_pet = Task(
+            "pet_task",
+            "Morning Walk",
+            "exercise",
+            20,
+            8,
+            Frequency.DAILY,
+            "morning",
+            assigned_pet_id="pet_001",
+        )
+        task_other_pet = Task(
+            "other_pet_task",
+            "Other Pet Feed",
+            "feeding",
+            10,
+            6,
+            Frequency.DAILY,
+            "morning",
+            assigned_pet_id="pet_999",
+        )
+        task_for_pet.mark_completed(today)
+
+        sample_owner.add_task(task_for_pet)
+        sample_owner.add_task(task_other_pet)
+
+        pending_for_pet = sample_owner.get_tasks(pet_id="pet_001", status="pending")
+        completed_for_pet = sample_owner.get_tasks(pet_id="pet_001", status="completed")
+
+        assert len(pending_for_pet) == 0
+        assert len(completed_for_pet) == 1
+        assert completed_for_pet[0].task_id == "pet_task"
+
+    def test_sort_by_time_window(self, sample_owner):
+        t_evening = Task("t1", "Evening Med", "health", 5, 10, Frequency.DAILY, "evening")
+        t_morning = Task("t2", "Morning Feed", "feeding", 10, 8, Frequency.DAILY, "morning")
+        t_afternoon = Task("t3", "Afternoon Play", "enrichment", 15, 7, Frequency.DAILY, "afternoon")
+
+        sample_owner.add_task(t_evening)
+        sample_owner.add_task(t_morning)
+        sample_owner.add_task(t_afternoon)
+
+        ordered = sample_owner.get_tasks(sort_by_time=True)
+        assert [task.task_id for task in ordered] == ["t2", "t3", "t1"]
+
+    def test_must_do_vs_nice_to_have_allocation(self, sample_pet):
+        planner = Planner()
+        must_do = Task("m1", "Medication", "health", 30, 10, Frequency.DAILY, "morning", must_do=True)
+        nice_to_have = Task("n1", "Playtime", "enrichment", 20, 5, Frequency.DAILY, "afternoon")
+
+        result = planner.allocate_within_time([must_do, nice_to_have], available_minutes=35)
+
+        assert [task.task_id for task in result["selected"]] == ["m1"]
+        assert result["skipped"]["n1"].startswith("Deferred as nice-to-have")
+
+    def test_basic_conflict_detection_dedupes_duplicates(self):
+        planner = Planner()
+        duplicate_high = Task("x1", "Feeding", "feeding", 10, 9, Frequency.DAILY, "morning")
+        duplicate_low = Task("x2", "Feeding", "feeding", 10, 4, Frequency.DAILY, "morning")
+
+        resolved = planner.resolve_conflicts([duplicate_low, duplicate_high])
+
+        assert len(resolved) == 1
+        assert resolved[0].task_id == "x1"
+
+    def test_generate_schedule_orders_by_time_window(self, sample_owner, sample_pet):
+        planner = Planner()
+        sample_owner.add_task(Task("t1", "Evening Med", "health", 5, 10, Frequency.DAILY, "evening"))
+        sample_owner.add_task(Task("t2", "Morning Feed", "feeding", 10, 8, Frequency.DAILY, "morning"))
+        sample_owner.add_task(Task("t3", "Afternoon Play", "enrichment", 15, 7, Frequency.DAILY, "afternoon"))
+
+        schedule = planner.generate_daily_schedule(sample_owner, sample_pet, date.today())
+        rows = schedule.to_display_rows()
+
+        assert [row["task"] for row in rows] == ["Morning Feed", "Afternoon Play", "Evening Med"]
+
+
+class TestSchedulerUtilities:
+    """Test explicit Scheduler utility methods for sort/filter/recurrence/conflicts."""
+
+    def test_sort_by_time_hhmm(self):
+        scheduler = Scheduler()
+        tasks = [
+            Task("t1", "Evening Med", "health", 5, 10, Frequency.DAILY, "evening", scheduled_time="18:00"),
+            Task("t2", "Morning Feed", "feeding", 10, 8, Frequency.DAILY, "morning", scheduled_time="08:00"),
+            Task("t3", "Afternoon Play", "enrichment", 15, 7, Frequency.DAILY, "afternoon", scheduled_time="14:00"),
+        ]
+
+        ordered = scheduler.sort_by_time(tasks)
+        assert [task.task_id for task in ordered] == ["t2", "t3", "t1"]
+
+    def test_filter_tasks_by_status_and_pet_name(self):
+        scheduler = Scheduler()
+        today = date.today()
+        task_a = Task("a", "Walk", "exercise", 20, 8, Frequency.DAILY, "morning", assigned_pet_id="pet_001")
+        task_b = Task("b", "Feed", "feeding", 10, 8, Frequency.DAILY, "morning", assigned_pet_id="pet_002")
+        task_a.mark_completed(today)
+
+        filtered = scheduler.filter_tasks(
+            [task_a, task_b],
+            status="completed",
+            pet_name="Buddy",
+            pet_name_lookup={"pet_001": "Buddy", "pet_002": "Whiskers"},
+        )
+
+        assert len(filtered) == 1
+        assert filtered[0].task_id == "a"
+
+    def test_mark_task_complete_creates_next_instance(self):
+        scheduler = Scheduler()
+        owner = Owner("o1", "Alice", 120)
+        daily_task = Task("daily_1", "Walk", "exercise", 20, 8, Frequency.DAILY, "morning", scheduled_time="08:30")
+        owner.add_task(daily_task)
+
+        scheduler.mark_task_complete(owner, "daily_1", date.today())
+        next_tasks = [task for task in owner.tasks if task.task_id.startswith("daily_1_next_")]
+
+        assert len(next_tasks) == 1
+        assert next_tasks[0].due_date == date.today() + timedelta(days=1)
+        assert next_tasks[0].scheduled_time == "08:30"
+
+    def test_detect_conflicts_returns_warning(self):
+        scheduler = Scheduler()
+        tasks = [
+            Task("a", "Dog Feed", "feeding", 10, 8, Frequency.DAILY, "morning", scheduled_time="08:00", assigned_pet_id="pet_001"),
+            Task("b", "Cat Feed", "feeding", 10, 8, Frequency.DAILY, "morning", scheduled_time="08:00", assigned_pet_id="pet_002"),
+        ]
+
+        warnings = scheduler.detect_conflicts(tasks, pet_name_lookup={"pet_001": "Buddy", "pet_002": "Whiskers"})
+
+        assert len(warnings) == 1
+        assert "Conflict at 08:00" in warnings[0]
 
 
 if __name__ == "__main__":
