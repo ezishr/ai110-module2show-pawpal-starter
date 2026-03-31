@@ -51,3 +51,18 @@ The scheduler now includes several algorithmic improvements:
 - Recurring task automation: when daily or weekly tasks are completed, the next due instance is created automatically.
 - Lightweight conflict detection via `Scheduler.detect_conflicts()` that returns warning messages for exact-time collisions.
 - Must-do versus nice-to-have scheduling, so high-priority tasks are allocated first when time is limited.
+
+## Testing PawPal+
+
+Run the test suite with:
+
+```bash
+python -m pytest
+```
+
+Tests currently cover task completion tracking, owner task CRUD operations, pet profile updates, due-task and time-window sorting behavior, must-do versus nice-to-have allocation, recurring task auto-generation, and lightweight conflict detection warnings.
+
+Confidence Level: ★★★★★ (5/5)
+
+Based on the latest test run results, the scheduler behavior is reliable for the implemented scenarios and edge cases in the current suite.
+
