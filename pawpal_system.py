@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, time
+from datetime import date, time, datetime, timedelta
+from enum import Enum
 from typing import Any
+
+
+class Frequency(Enum):
+    """Supported task frequency patterns."""
+    DAILY = "daily"
+    EVERY_OTHER_DAY = "every_other_day"
+    WEEKLY = "weekly"
+    TWICE_WEEKLY = "twice_weekly"
+    AS_NEEDED = "as_needed"
 
 
 @dataclass
@@ -14,10 +24,20 @@ class Task:
     category: str
     duration_minutes: int
     priority: int
-    frequency: str
+    frequency: Frequency
     preferred_time_window: str
-    last_completed_on: date | None = None
-    completed_today: bool = False
+    completion_history: list[date] = field(default_factory=list)
+
+    @property
+    def last_completed_on(self) -> date | None:
+        """Return the most recent completion date, or None if never completed."""
+        return self.completion_history[-1] if self.completion_history else None
+
+    @property
+    def completed_today(self) -> bool:
+        """Return whether this task was completed on today's date."""
+        today = date.today()
+        return today in self.completion_history
 
     def is_due(self, on_date: date) -> bool:
         """Return whether this task should be scheduled on a given date."""
@@ -31,8 +51,8 @@ class Task:
         """Reset completion status for this task."""
         raise NotImplementedError
 
-    def get_effective_priority(self, pet: Pet) -> int:
-        """Compute adjusted priority using pet context and special needs."""
+    def get_effective_priority(self, pet: Pet, on_date: date) -> int:
+        """Compute adjusted priority using pet context, special needs, and recency."""
         raise NotImplementedError
 
 
@@ -91,6 +111,7 @@ class Schedule:
     total_minutes_used: int = 0
     items: list[ScheduledTask] = field(default_factory=list)
     explanations: list[str] = field(default_factory=list)
+    skipped_tasks_with_reasons: dict[str, str] = field(default_factory=dict)
 
     def add_item(self, item: ScheduledTask) -> bool:
         """Attempt to add a scheduled item and return whether it fit."""
@@ -122,15 +143,29 @@ class Owner:
 
     def add_task(self, task: Task) -> None:
         """Add a new care task to the owner's task list."""
-        raise NotImplementedError
+        if any(t.task_id == task.task_id for t in self.tasks):
+            raise ValueError(f"Task with id '{task.task_id}' already exists.")
+        self.tasks.append(task)
 
     def remove_task(self, task_id: str) -> bool:
-        """Remove a task by id and return success."""
-        raise NotImplementedError
+        """Remove a task by id and return success. Raises ValueError if not found."""
+        original_length = len(self.tasks)
+        self.tasks = [t for t in self.tasks if t.task_id != task_id]
+        if len(self.tasks) == original_length:
+            raise ValueError(f"Task with id '{task_id}' not found.")
+        return True
 
     def update_task(self, task_id: str, updates: dict[str, Any]) -> bool:
-        """Update a task by id using partial field updates."""
-        raise NotImplementedError
+        """Update a task by id using partial field updates. Raises ValueError if not found."""
+        for task in self.tasks:
+            if task.task_id == task_id:
+                for key, value in updates.items():
+                    if hasattr(task, key):
+                        setattr(task, key, value)
+                    else:
+                        raise ValueError(f"Task has no attribute '{key}'.")
+                return True
+        raise ValueError(f"Task with id '{task_id}' not found.")
 
     def get_tasks(self) -> list[Task]:
         """Return all tasks associated with the owner."""
@@ -155,18 +190,31 @@ class Planner:
         """Filter tasks down to only those due on the target date."""
         raise NotImplementedError
 
-    def prioritize_tasks(self, tasks: list[Task], pet: Pet) -> list[Task]:
+    def prioritize_tasks(self, tasks: list[Task], pet: Pet, on_date: date) -> list[Task]:
         """Order tasks by effective priority and scheduling policy."""
         raise NotImplementedError
 
-    def allocate_within_time(self, tasks: list[Task], available_minutes: int) -> list[Task]:
-        """Select tasks that fit within available daily time."""
+    def allocate_within_time(self, tasks: list[Task], available_minutes: int) -> dict[str, Any]:
+        """Select tasks that fit within available daily time.
+        
+        Returns:
+            dict with keys 'selected' (list[Task]), 'skipped' (list[Task]), 
+            'skipped_reasons' (dict[str, str]).
+        """
         raise NotImplementedError
 
     def resolve_conflicts(self, tasks: list[Task]) -> list[Task]:
         """Resolve collisions, dependencies, or ordering conflicts."""
         raise NotImplementedError
 
-    def build_explanations(self, selected: list[Task], skipped: list[Task]) -> list[str]:
-        """Produce human-readable reasons for selection decisions."""
+    def build_explanations(self, selected: list[Task], skipped_info: dict[str, str]) -> list[str]:
+        """Produce human-readable reasons for selection decisions.
+        
+        Args:
+            selected: list of tasks that made it into the schedule
+            skipped_info: dict mapping task_id to skip reason
+            
+        Returns:
+            list of explanation strings for display
+        """
         raise NotImplementedError
