@@ -7,6 +7,63 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+The initial UML design for PawPal+ focuses on separating the system into three main components: core domain entities, scheduling logic, and application control. The system design enables maintenance of the data (which includes pets and tasks) and the decision-making logic (which handles task scheduling) and the user interface interactions because all components function as separate units.
+
+The Owner, Pet, and Task classes form the fundamental components which contain all application information. The system includes a Planner (Scheduler) class which generates a daily care plan after evaluating task priorities and task durations and user restrictions about available time. The Schedule system uses ScheduledTask objects to arrange tasks into particular time slots based on its defined output.
+
+The design enables independent development of the scheduling algorithm because it separates all system components which include user interface elements and data model elements and the scheduling algorithm itself.
+
+***Classes and Their Responsibilities***
+
+**Owner**
+
+The Owner class represents the user of the application. It stores personal preferences and constraints, such as available time per day, and manages the list of care tasks.
+	•	Responsibilities:
+	•	Manage tasks (add, remove, update)
+	•	Store user preferences and availability
+	•	Provide task data to the planner
+
+**Pet**
+
+The Pet class stores information about the pet being cared for, such as its name, species, and any special needs.
+	•	Responsibilities:
+	•	Maintain pet profile information
+	•	Provide context (e.g., special care requirements) for planning
+
+**Task**
+
+The Task class represents individual pet care activities (e.g., walking, feeding, medication).
+	•	Responsibilities:
+	•	Store task details such as duration, priority, and frequency
+	•	Determine whether a task is due on a given day
+	•	Track completion status
+
+**Planner (Scheduler)**
+
+The Planner is the core logic component of the system. It generates a daily schedule by selecting and organizing tasks based on constraints and priorities.
+	•	Responsibilities:
+	•	Filter tasks that are due
+	•	Prioritize tasks based on importance
+	•	Allocate tasks within the available time
+	•	Handle scheduling conflicts
+	•	Generate explanations for scheduling decisions
+
+**Schedule**
+
+The Schedule class represents the final daily plan produced by the Planner.
+	•	Responsibilities:
+	•	Store the list of scheduled tasks
+	•	Track total time used and remaining time
+	•	Provide a structured representation of the daily plan
+
+**ScheduledTask**
+
+This class represents a task assigned to a specific time slot within the schedule.
+	•	Responsibilities:
+	•	Associate a task with a start and end time
+	•	Provide duration and timing details for display
+
+
 **b. Design changes**
 
 - Did your design change during implementation?
