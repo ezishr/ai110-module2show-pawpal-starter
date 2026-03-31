@@ -22,6 +22,16 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Features
+
+- Time sorting: orders tasks by exact `HH:MM` task time using `Scheduler.sort_by_time()`.
+- Status and pet filtering: filters task views by pending/completed state and assigned pet name with `Scheduler.filter_tasks()`.
+- Recurring automation: creating the next due task instance automatically when daily or weekly tasks are marked complete.
+- Conflict warnings: detects exact-time task collisions and surfaces them as non-blocking warnings.
+- Must-do prioritization: allocates high-priority or must-do tasks first when available time is limited.
+- Explainable schedules: generates human-readable reasons for selected and skipped tasks.
+- Streamlit task insights: presents sorted tables, conflict warnings, and schedule output with `st.table`, `st.warning`, and `st.success`.
+
 ## Getting started
 
 ### Setup
@@ -66,3 +76,8 @@ Confidence Level: ★★★★★ (5/5)
 
 Based on the latest test run results, the scheduler behavior is reliable for the implemented scenarios and edge cases in the current suite.
 
+## 📸 Demo
+
+Include a screenshot of the final Streamlit app below.
+
+<a href="/course_images/ai110/pawpal_demo.gif" target="_blank"><img src='/course_images/ai110/demo.gif' title='PawPal App Demo' width='' alt='PawPal App Demo' class='center-block' /></a>

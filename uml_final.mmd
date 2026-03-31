@@ -1,0 +1,107 @@
+classDiagram
+    class Frequency {
+        <<enumeration>>
+        DAILY
+        EVERY_OTHER_DAY
+        WEEKLY
+        TWICE_WEEKLY
+        AS_NEEDED
+    }
+
+    class Task {
+        +str task_id
+        +str title
+        +str category
+        +int duration_minutes
+        +int priority
+        +Frequency frequency
+        +str preferred_time_window
+        +str scheduled_time
+        +date due_date
+        +str assigned_pet_id
+        +bool must_do
+        +list~date~ completion_history
+        +date last_completed_on
+        +bool completed_today
+        +bool is_due(on_date)
+        +void mark_completed(on_date)
+        +void mark_incomplete()
+        +int get_effective_priority(pet, on_date)
+    }
+
+    class Pet {
+        +str pet_id
+        +str name
+        +str species
+        +str breed
+        +int age_years
+        +list~str~ special_needs
+        +void update_profile(updates)
+        +void add_special_need(need)
+        +bool remove_special_need(need)
+        +str get_care_context()
+    }
+
+    class ScheduledTask {
+        +Task task
+        +time start_time
+        +time end_time
+        +str reason
+        +int duration_minutes()
+        +bool overlaps(other)
+    }
+
+    class Schedule {
+        +date schedule_date
+        +int total_minutes_available
+        +int total_minutes_used
+        +list~ScheduledTask~ items
+        +list~str~ explanations
+        +dict skipped_tasks_with_reasons
+        +bool add_item(item)
+        +int remaining_minutes()
+        +bool is_full()
+        +list~dict~ to_display_rows()
+    }
+
+    class Owner {
+        +str owner_id
+        +str name
+        +int available_minutes_per_day
+        +dict preferences
+        +list~Task~ tasks
+        +Pet pet
+        +void add_task(task)
+        +bool remove_task(task_id)
+        +bool update_task(task_id, updates)
+        +list~Task~ get_tasks(pet_id, status, sort_by_time)
+        +list~Task~ get_due_tasks(on_date, pet_id, status, sort_by_time)
+    }
+
+    class Scheduler {
+        +list~Task~ sort_by_time(tasks)
+        +list~Task~ filter_tasks(tasks, status, pet_name, pet_name_lookup, on_date)
+        +Task mark_task_complete(owner, task_id, on_date)
+        +void _create_next_recurring_task(owner, completed_task, next_due_date)
+        +list~str~ detect_conflicts(tasks, pet_name_lookup)
+    }
+
+    class Planner {
+        +str strategy
+        +Schedule generate_daily_schedule(owner, pet, on_date)
+        +list~Task~ filter_due_tasks(tasks, on_date)
+        +list~Task~ prioritize_tasks(tasks, pet, on_date)
+        +dict allocate_within_time(tasks, available_minutes)
+        +list~Task~ resolve_conflicts(tasks)
+        +list~str~ build_explanations(selected, skipped_info)
+    }
+
+    Owner "1" o-- "0..*" Task
+    Owner "1" o-- "0..1" Pet
+    Schedule "1" o-- "0..*" ScheduledTask
+    ScheduledTask "1" --> "1" Task
+    Planner --|> Scheduler
+    Planner --> Owner
+    Planner --> Pet
+    Planner --> Schedule
+    Task --> Frequency
