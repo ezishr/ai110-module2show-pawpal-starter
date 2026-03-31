@@ -80,4 +80,4 @@ Based on the latest test run results, the scheduler behavior is reliable for the
 
 Include a screenshot of the final Streamlit app below.
 
-<a href="/course_images/ai110/pawpal_demo.gif" target="_blank"><img src='demo.gif' title='PawPal App Demo' width='' alt='PawPal App Demo' class='center-block' /></a>
+<a href="demo.gif" target="_blank"><img src='demo.gif' title='PawPal App Demo' width='' alt='PawPal App Demo' class='center-block' /></a>
