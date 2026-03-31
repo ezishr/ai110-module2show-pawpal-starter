@@ -40,19 +40,20 @@ class Task:
         return today in self.completion_history
 
     def is_due(self, on_date: date) -> bool:
-        """Return whether this task should be scheduled on a given date."""
+        """Check if task is due on the specified date based on frequency."""
         raise NotImplementedError
 
     def mark_completed(self, on_date: date) -> None:
-        """Mark this task as completed on a specific date."""
-        raise NotImplementedError
+        """Record task completion on the given date."""
+        if on_date not in self.completion_history:
+            self.completion_history.append(on_date)
 
     def mark_incomplete(self) -> None:
-        """Reset completion status for this task."""
-        raise NotImplementedError
+        """Clear all completion history for this task."""
+        self.completion_history.clear()
 
     def get_effective_priority(self, pet: Pet, on_date: date) -> int:
-        """Compute adjusted priority using pet context, special needs, and recency."""
+        """Calculate priority adjusted for pet context and time-based factors."""
         raise NotImplementedError
 
 
@@ -68,20 +69,31 @@ class Pet:
     special_needs: list[str] = field(default_factory=list)
 
     def update_profile(self, updates: dict[str, Any]) -> None:
-        """Update pet profile fields using a partial update map."""
-        raise NotImplementedError
+        """Update pet profile fields from a dictionary of changes."""
+        for key, value in updates.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise ValueError(f"Pet has no attribute '{key}'.")
 
     def add_special_need(self, need: str) -> None:
-        """Add a special need to this pet's profile."""
-        raise NotImplementedError
+        """Add a special care need for this pet."""
+        if need not in self.special_needs:
+            self.special_needs.append(need)
 
     def remove_special_need(self, need: str) -> bool:
-        """Remove a special need if present and return success."""
-        raise NotImplementedError
+        """Remove a special care need and return success."""
+        if need in self.special_needs:
+            self.special_needs.remove(need)
+            return True
+        return False
 
     def get_care_context(self) -> str:
-        """Return a concise summary of care-related context."""
-        raise NotImplementedError
+        """Generate a summary of the pet's profile and care needs."""
+        context = f"{self.name} is a {self.age_years}-year-old {self.species} ({self.breed})"
+        if self.special_needs:
+            context += f". Special needs: {', '.join(self.special_needs)}"
+        return context
 
 
 @dataclass
@@ -94,11 +106,11 @@ class ScheduledTask:
     reason: str
 
     def duration_minutes(self) -> int:
-        """Return scheduled duration in minutes."""
+        """Calculate task duration in minutes based on start and end times."""
         raise NotImplementedError
 
     def overlaps(self, other: ScheduledTask) -> bool:
-        """Return True when two scheduled tasks overlap in time."""
+        """Check if this task conflicts with another scheduled task."""
         raise NotImplementedError
 
 
@@ -114,19 +126,19 @@ class Schedule:
     skipped_tasks_with_reasons: dict[str, str] = field(default_factory=dict)
 
     def add_item(self, item: ScheduledTask) -> bool:
-        """Attempt to add a scheduled item and return whether it fit."""
+        """Add a scheduled task to the plan if there's available time."""
         raise NotImplementedError
 
     def remaining_minutes(self) -> int:
-        """Return how many minutes are still unallocated."""
+        """Calculate unallocated time remaining in the schedule."""
         raise NotImplementedError
 
     def is_full(self) -> bool:
-        """Return True when no more task time can be allocated."""
+        """Check if the schedule has reached capacity."""
         raise NotImplementedError
 
     def to_display_rows(self) -> list[dict[str, Any]]:
-        """Return a UI-friendly representation of schedule rows."""
+        """Format schedule for UI display as a list of row dictionaries."""
         raise NotImplementedError
 
 
@@ -142,13 +154,13 @@ class Owner:
     pet: Pet | None = None
 
     def add_task(self, task: Task) -> None:
-        """Add a new care task to the owner's task list."""
+        """Add a new task to the owner's task list (rejects duplicate IDs)."""
         if any(t.task_id == task.task_id for t in self.tasks):
             raise ValueError(f"Task with id '{task.task_id}' already exists.")
         self.tasks.append(task)
 
     def remove_task(self, task_id: str) -> bool:
-        """Remove a task by id and return success. Raises ValueError if not found."""
+        """Remove a task by ID (raises ValueError if not found)."""
         original_length = len(self.tasks)
         self.tasks = [t for t in self.tasks if t.task_id != task_id]
         if len(self.tasks) == original_length:
@@ -156,7 +168,7 @@ class Owner:
         return True
 
     def update_task(self, task_id: str, updates: dict[str, Any]) -> bool:
-        """Update a task by id using partial field updates. Raises ValueError if not found."""
+        """Update task fields by ID (raises ValueError if not found or invalid field)."""
         for task in self.tasks:
             if task.task_id == task_id:
                 for key, value in updates.items():
@@ -168,11 +180,11 @@ class Owner:
         raise ValueError(f"Task with id '{task_id}' not found.")
 
     def get_tasks(self) -> list[Task]:
-        """Return all tasks associated with the owner."""
-        raise NotImplementedError
+        """Return all tasks in the owner's task list."""
+        return self.tasks
 
     def get_due_tasks(self, on_date: date) -> list[Task]:
-        """Return only tasks due for the specified date."""
+        """Return tasks that are due on the specified date."""
         raise NotImplementedError
 
 
@@ -180,41 +192,29 @@ class Planner:
     """Core scheduling engine that builds a daily plan."""
 
     def __init__(self, strategy: str = "priority-first") -> None:
+        """Initialize planner with scheduling strategy."""
         self.strategy = strategy
 
     def generate_daily_schedule(self, owner: Owner, pet: Pet, on_date: date) -> Schedule:
-        """Build and return the final daily schedule."""
+        """Generate an optimized daily schedule based on tasks and constraints."""
         raise NotImplementedError
 
     def filter_due_tasks(self, tasks: list[Task], on_date: date) -> list[Task]:
-        """Filter tasks down to only those due on the target date."""
+        """Filter tasks to only those due on the specified date."""
         raise NotImplementedError
 
     def prioritize_tasks(self, tasks: list[Task], pet: Pet, on_date: date) -> list[Task]:
-        """Order tasks by effective priority and scheduling policy."""
+        """Sort tasks by effective priority considering pet context and recency."""
         raise NotImplementedError
 
     def allocate_within_time(self, tasks: list[Task], available_minutes: int) -> dict[str, Any]:
-        """Select tasks that fit within available daily time.
-        
-        Returns:
-            dict with keys 'selected' (list[Task]), 'skipped' (list[Task]), 
-            'skipped_reasons' (dict[str, str]).
-        """
+        """Select tasks that fit within time constraints and return selected/skipped info."""
         raise NotImplementedError
 
     def resolve_conflicts(self, tasks: list[Task]) -> list[Task]:
-        """Resolve collisions, dependencies, or ordering conflicts."""
+        """Resolve scheduling conflicts and enforce task dependencies."""
         raise NotImplementedError
 
     def build_explanations(self, selected: list[Task], skipped_info: dict[str, str]) -> list[str]:
-        """Produce human-readable reasons for selection decisions.
-        
-        Args:
-            selected: list of tasks that made it into the schedule
-            skipped_info: dict mapping task_id to skip reason
-            
-        Returns:
-            list of explanation strings for display
-        """
+        """Generate human-readable explanations for scheduling decisions."""
         raise NotImplementedError
